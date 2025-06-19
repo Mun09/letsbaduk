@@ -1,7 +1,13 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import Image from "next/image";
-import { BOARD_SIZE, OFFSET_RATIO } from "./utils";
+import {
+  BOARD_SIZE,
+  countCapturedStones,
+  handleFileUpload,
+  OFFSET_RATIO,
+  saveSgf,
+} from "./utils";
 
 export default function PreciseGoban() {
   const boardRef = useRef<HTMLDivElement>(null);
@@ -233,6 +239,47 @@ export default function PreciseGoban() {
     setHoverPos({ x, y });
   };
 
+  const nextSu = () => {
+    const nextIndex = currentMoveIndex - 1;
+    if (nextIndex >= 0) {
+      setBoard(prevBoards[nextIndex]);
+      setCurrentMoveIndex(nextIndex);
+      setIsBlackTurn((prevBoards.length - nextIndex) % 2 == 0);
+    }
+  };
+
+  const prevSu = () => {
+    const nextIndex = currentMoveIndex + 1;
+    if (nextIndex < prevBoards.length) {
+      setBoard(prevBoards[nextIndex]);
+      setCurrentMoveIndex(nextIndex);
+      setIsBlackTurn((prevBoards.length - nextIndex) % 2 == 0);
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") {
+        // 왼쪽 화살표 누름 → 이전 수로 이동
+        prevSu();
+      } else if (e.key === "ArrowRight") {
+        // 오른쪽 화살표 누름 → 다음 수로 이동
+        nextSu();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [currentMoveIndex, prevBoards]);
+
+  const { blackCaptured, whiteCaptured } = useMemo(
+    () => countCapturedStones(prevBoards),
+    [prevBoards]
+  );
+
   return (
     <div className="flex flex-col items-center w-full max-w-[100vmin] md:max-w-[600px]">
       {errorMessage && (
@@ -319,20 +366,11 @@ export default function PreciseGoban() {
           />
         )}
       </div>
-
       <br></br>
-
       <div className="mt-4 flex items-center justify-center gap-4 text-sm">
         <button
           className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
-          onClick={() => {
-            const nextIndex = currentMoveIndex + 1;
-            if (nextIndex < prevBoards.length) {
-              setBoard(prevBoards[nextIndex]);
-              setCurrentMoveIndex(nextIndex);
-              setIsBlackTurn((prevBoards.length - nextIndex) % 2 == 0);
-            }
-          }}
+          onClick={prevSu}
           disabled={currentMoveIndex >= prevBoards.length - 1}
         >
           ◀ 이전 수
@@ -344,14 +382,7 @@ export default function PreciseGoban() {
 
         <button
           className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
-          onClick={() => {
-            const nextIndex = currentMoveIndex - 1;
-            if (nextIndex >= 0) {
-              setBoard(prevBoards[nextIndex]);
-              setCurrentMoveIndex(nextIndex);
-              setIsBlackTurn((prevBoards.length - nextIndex) % 2 == 0);
-            }
-          }}
+          onClick={nextSu}
           disabled={currentMoveIndex <= 0}
         >
           다음 수 ▶
@@ -360,7 +391,12 @@ export default function PreciseGoban() {
 
       <br></br>
 
-      <button
+      <div className="mt-4 flex gap-4 text-sm text-gray-800">
+        <div>⚪ 백 사석: {whiteCaptured}</div>
+        <div>⚫ 흑 사석: {blackCaptured}</div>
+      </div>
+
+      {/* <button
         className="ml-2 px-3 py-1 bg-red-500 text-white rounded disabled:opacity-50"
         onClick={() => {
           setPrevBoards((prev) => {
@@ -379,7 +415,28 @@ export default function PreciseGoban() {
         disabled={currentMoveIndex != 0 || prevBoards.length <= 0}
       >
         수 물리기
-      </button>
+      </button> */}
+      <br></br>
+      <div className="flex gap-2 mt-4">
+        <button
+          onClick={() => saveSgf(prevBoards)}
+          className="px-3 py-1 bg-green-600 text-white rounded"
+        >
+          SGF 저장
+        </button>
+
+        <label className="px-3 py-1 bg-blue-600 text-white rounded cursor-pointer">
+          SGF 불러오기
+          <input
+            type="file"
+            accept=".sgf"
+            onChange={(e) =>
+              handleFileUpload(e, setPrevBoards, setBoard, setCurrentMoveIndex)
+            }
+            className="hidden"
+          />
+        </label>
+      </div>
     </div>
   );
 }
