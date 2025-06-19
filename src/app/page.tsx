@@ -168,16 +168,22 @@ export default function PreciseGoban() {
     setErrorMessage("");
   };
 
-  // 마우스 이벤트 핸들러
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+  // 공통 좌표 계산 함수
+  const updateHoverAndPlace = (
+    clientX: number,
+    clientY: number,
+    shouldPlace = false
+  ) => {
     if (!boardRef.current) return;
+
     const rect = boardRef.current.getBoundingClientRect();
     const offsetX = rect.width * OFFSET_RATIO;
     const offsetY = rect.height * OFFSET_RATIO;
     const usableWidth = rect.width - 2 * offsetX;
     const usableHeight = rect.height - 2 * offsetY;
-    const relX = e.clientX - rect.left - offsetX;
-    const relY = e.clientY - rect.top - offsetY;
+
+    const relX = clientX - rect.left - offsetX;
+    const relY = clientY - rect.top - offsetY;
 
     if (relX < 0 || relY < 0 || relX > usableWidth || relY > usableHeight) {
       setHoverPos(null);
@@ -193,7 +199,11 @@ export default function PreciseGoban() {
       setHoverPos(null);
       return;
     }
+
     setHoverPos({ x, y });
+    if (shouldPlace) {
+      handlePlaceStone(x, y);
+    }
   };
 
   const nextSu = useCallback(() => {
@@ -246,9 +256,14 @@ export default function PreciseGoban() {
       )}
       <div
         ref={boardRef}
-        onClick={() => hoverPos && handlePlaceStone(hoverPos.x, hoverPos.y)}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={() => setHoverPos(null)}
+        onMouseMove={(e) => updateHoverAndPlace(e.clientX, e.clientY)}
+        onClick={() => {
+          if (hoverPos) handlePlaceStone(hoverPos.x, hoverPos.y);
+        }}
+        onTouchStart={(e) => {
+          const touch = e.touches[0];
+          updateHoverAndPlace(touch.clientX, touch.clientY, true); // 즉시 착수
+        }}
         className="relative w-full max-w-[90vmin] aspect-square border-2 border-gray-800 select-none"
       >
         <Image
