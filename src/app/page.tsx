@@ -5,17 +5,21 @@ import { BOARD_SIZE, OFFSET_RATIO } from "./utils";
 
 export default function PreciseGoban() {
   const boardRef = useRef<HTMLDivElement>(null);
+  const prevBoardsRef = useRef<BoardState[]>([]); // 패(ko) 규칙을 위한 이전 보드 상태 기록
+
   const [board, setBoard] = useState<BoardState>(
     Array(BOARD_SIZE)
       .fill(null)
       .map(() => Array(BOARD_SIZE).fill(null))
   );
+  const [prevBoards, setPrevBoards] = useState<BoardState[]>([]);
   const [isBlackTurn, setIsBlackTurn] = useState(true);
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(
     null
   );
   const [errorMessage, setErrorMessage] = useState("");
   const [stoneSize, setStoneSize] = useState(60);
+  const [currentMoveIndex, setCurrentMoveIndex] = useState(0);
 
   useEffect(() => {
     // Function to update stone size based on current board width
@@ -50,7 +54,6 @@ export default function PreciseGoban() {
       }
     };
   }, []);
-  const prevBoardsRef = useRef<BoardState[]>([]); // 패(ko) 규칙을 위한 이전 보드 상태 기록
 
   // 돌의 호석(liberty) 계산
   const countLiberties = (
@@ -189,7 +192,16 @@ export default function PreciseGoban() {
     // 4. 상태 업데이트
     prevBoardsRef.current = [newBoard, ...prevBoardsRef.current].slice(0, 2); // 최근 2개 보드 저장
     setBoard(newBoard);
-    setIsBlackTurn(!isBlackTurn);
+    setPrevBoards((prev) => {
+      const updated = [
+        newBoard,
+        ...prev.slice(-(prev.length - currentMoveIndex)),
+      ];
+      setIsBlackTurn(updated.length % 2 == 0); // 다음 턴 색상 전환
+
+      return updated;
+    }); // 최근 2개 보드 상태 저장
+    setCurrentMoveIndex(0);
     setErrorMessage("");
   };
 
@@ -222,7 +234,7 @@ export default function PreciseGoban() {
   };
 
   return (
-    <>
+    <div className="flex flex-col items-center w-full max-w-[100vmin] md:max-w-[600px]">
       {errorMessage && (
         <div className="absolute top-2 left-2 bg-red-600 text-white px-2 py-1 rounded text-sm z-10">
           {errorMessage}
@@ -307,6 +319,67 @@ export default function PreciseGoban() {
           />
         )}
       </div>
-    </>
+
+      <br></br>
+
+      <div className="mt-4 flex items-center justify-center gap-4 text-sm">
+        <button
+          className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+          onClick={() => {
+            const nextIndex = currentMoveIndex + 1;
+            if (nextIndex < prevBoards.length) {
+              setBoard(prevBoards[nextIndex]);
+              setCurrentMoveIndex(nextIndex);
+              setIsBlackTurn((prevBoards.length - nextIndex) % 2 == 0);
+            }
+          }}
+          disabled={currentMoveIndex >= prevBoards.length - 1}
+        >
+          ◀ 이전 수
+        </button>
+
+        <span>
+          {prevBoards.length - currentMoveIndex} / {prevBoards.length}
+        </span>
+
+        <button
+          className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+          onClick={() => {
+            const nextIndex = currentMoveIndex - 1;
+            if (nextIndex >= 0) {
+              setBoard(prevBoards[nextIndex]);
+              setCurrentMoveIndex(nextIndex);
+              setIsBlackTurn((prevBoards.length - nextIndex) % 2 == 0);
+            }
+          }}
+          disabled={currentMoveIndex <= 0}
+        >
+          다음 수 ▶
+        </button>
+      </div>
+
+      <br></br>
+
+      <button
+        className="ml-2 px-3 py-1 bg-red-500 text-white rounded disabled:opacity-50"
+        onClick={() => {
+          setPrevBoards((prev) => {
+            const updated = prev.slice(1);
+            setBoard(
+              updated[0] ||
+                Array(BOARD_SIZE)
+                  .fill(null)
+                  .map(() => Array(BOARD_SIZE).fill(null))
+            );
+            setIsBlackTurn(updated.length % 2 == 0);
+
+            return updated;
+          });
+        }}
+        disabled={currentMoveIndex != 0 || prevBoards.length <= 0}
+      >
+        수 물리기
+      </button>
+    </div>
   );
 }
