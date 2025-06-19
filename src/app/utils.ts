@@ -1,3 +1,5 @@
+import { BoardState } from "./types/types";
+
 export const BOARD_SIZE = 19;
 export const OFFSET_RATIO = 0.031;
 
@@ -33,10 +35,10 @@ export const saveSgf = (prevBoards: BoardState[]) => {
 
 const loadSgf = (
   sgf: string,
-  setPrevBoards: Function,
-  setBoard: Function,
-  setCurrentMoveIndex: Function
-) => {
+  setPrevBoards: React.Dispatch<React.SetStateAction<BoardState[]>>,
+  setBoard: React.Dispatch<React.SetStateAction<BoardState>>,
+  setCurrentMoveIndex: React.Dispatch<React.SetStateAction<number>>
+): void => {
   const regex = /;(B|W)\[([a-s])([a-s])\]/g;
   const empty = Array(BOARD_SIZE)
     .fill(null)
@@ -63,9 +65,9 @@ const loadSgf = (
 
 export const handleFileUpload = (
   e: React.ChangeEvent<HTMLInputElement>,
-  setPrevBoards: Function,
-  setBoard: Function,
-  setCurrentMoveIndex: Function
+  setPrevBoards: React.Dispatch<React.SetStateAction<BoardState[]>>,
+  setBoard: React.Dispatch<React.SetStateAction<BoardState>>,
+  setCurrentMoveIndex: React.Dispatch<React.SetStateAction<number>>
 ) => {
   const file = e.target.files?.[0];
   if (!file) return;

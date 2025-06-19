@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import Image from "next/image";
 import {
   BOARD_SIZE,
@@ -8,6 +8,7 @@ import {
   OFFSET_RATIO,
   saveSgf,
 } from "./utils";
+import { BoardState } from "./types/types";
 
 export default function PreciseGoban() {
   const boardRef = useRef<HTMLDivElement>(null);
@@ -28,76 +29,32 @@ export default function PreciseGoban() {
   const [currentMoveIndex, setCurrentMoveIndex] = useState(0);
 
   useEffect(() => {
-    // Function to update stone size based on current board width
     const updateStoneSize = () => {
       if (boardRef.current) {
         const rect = boardRef.current.getBoundingClientRect();
-
         const offsetX = rect.width * OFFSET_RATIO;
-        const offsetY = rect.height * OFFSET_RATIO;
         const usableWidth = rect.width - 2 * offsetX;
-        const usableHeight = rect.height - 2 * offsetY;
         const cellWidth = usableWidth / (BOARD_SIZE - 1);
-        const cellHeight = usableHeight / (BOARD_SIZE - 1);
 
         setStoneSize(Math.round(cellWidth * 1.2));
       }
     };
 
-    // Initial calculation
     updateStoneSize();
 
-    // Set up resize observer to detect changes in element size
+    const node = boardRef.current;
     const resizeObserver = new ResizeObserver(updateStoneSize);
-    if (boardRef.current) {
-      resizeObserver.observe(boardRef.current);
+
+    if (node) {
+      resizeObserver.observe(node);
     }
 
-    // Clean up observer on unmount
     return () => {
-      if (boardRef.current) {
-        resizeObserver.unobserve(boardRef.current);
+      if (node) {
+        resizeObserver.unobserve(node);
       }
     };
   }, []);
-
-  // 돌의 호석(liberty) 계산
-  const countLiberties = (
-    x: number,
-    y: number,
-    visited: boolean[][] = []
-  ): number => {
-    if (!visited.length) {
-      visited = Array(BOARD_SIZE)
-        .fill(null)
-        .map(() => Array(BOARD_SIZE).fill(false));
-    }
-    if (x < 0 || y < 0 || x >= BOARD_SIZE || y >= BOARD_SIZE || visited[x][y])
-      return 0;
-    visited[x][y] = true;
-    if (board[x][y] === null) return 1;
-
-    const color = board[x][y];
-    let liberties = 0;
-    const directions = [
-      [0, 1],
-      [1, 0],
-      [0, -1],
-      [-1, 0],
-    ];
-    for (const [dx, dy] of directions) {
-      const nx = x + dx,
-        ny = y + dy;
-      if (nx >= 0 && ny >= 0 && nx < BOARD_SIZE && ny < BOARD_SIZE) {
-        if (board[nx][ny] === color) {
-          liberties += countLiberties(nx, ny, visited);
-        } else if (board[nx][ny] === null) {
-          liberties++;
-        }
-      }
-    }
-    return liberties;
-  };
 
   // 돌 그룹과 호석 찾기
   const getGroupAndLiberties = (x: number, y: number, newBoard: BoardState) => {
@@ -239,23 +196,23 @@ export default function PreciseGoban() {
     setHoverPos({ x, y });
   };
 
-  const nextSu = () => {
+  const nextSu = useCallback(() => {
     const nextIndex = currentMoveIndex - 1;
     if (nextIndex >= 0) {
       setBoard(prevBoards[nextIndex]);
       setCurrentMoveIndex(nextIndex);
       setIsBlackTurn((prevBoards.length - nextIndex) % 2 == 0);
     }
-  };
+  }, [currentMoveIndex, prevBoards]);
 
-  const prevSu = () => {
+  const prevSu = useCallback(() => {
     const nextIndex = currentMoveIndex + 1;
     if (nextIndex < prevBoards.length) {
       setBoard(prevBoards[nextIndex]);
       setCurrentMoveIndex(nextIndex);
       setIsBlackTurn((prevBoards.length - nextIndex) % 2 == 0);
     }
-  };
+  }, [currentMoveIndex, prevBoards]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -273,7 +230,7 @@ export default function PreciseGoban() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [currentMoveIndex, prevBoards]);
+  }, [prevSu, nextSu]);
 
   const { blackCaptured, whiteCaptured } = useMemo(
     () => countCapturedStones(prevBoards),
@@ -396,26 +353,6 @@ export default function PreciseGoban() {
         <div>⚫ 흑 사석: {blackCaptured}</div>
       </div>
 
-      {/* <button
-        className="ml-2 px-3 py-1 bg-red-500 text-white rounded disabled:opacity-50"
-        onClick={() => {
-          setPrevBoards((prev) => {
-            const updated = prev.slice(1);
-            setBoard(
-              updated[0] ||
-                Array(BOARD_SIZE)
-                  .fill(null)
-                  .map(() => Array(BOARD_SIZE).fill(null))
-            );
-            setIsBlackTurn(updated.length % 2 == 0);
-
-            return updated;
-          });
-        }}
-        disabled={currentMoveIndex != 0 || prevBoards.length <= 0}
-      >
-        수 물리기
-      </button> */}
       <br></br>
       <div className="flex gap-2 mt-4">
         <button

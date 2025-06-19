@@ -1,2 +1,2 @@
-type StoneColor = "black" | "white" | null;
-type BoardState = StoneColor[][];
+export type StoneColor = "black" | "white" | null;
+export type BoardState = StoneColor[][];
