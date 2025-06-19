@@ -1,0 +1,3 @@
+User-Agent: *
+Allow: /
+Sitemap: https://letsbaduk.vercel.app/sitemap.xml
