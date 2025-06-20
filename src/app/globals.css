@@ -4,5 +4,7 @@
 
 html,
 body {
-  @apply h-screen w-screen m-0 p-0 flex items-center justify-center bg-[#f5f5dc];
+  max-width: 100%;
+  overflow-x: hidden;
+  background-color: #f5f5dc;
 }

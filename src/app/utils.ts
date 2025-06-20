@@ -1,7 +1,8 @@
 import { BoardState } from "./types/types";
 
 export const BOARD_SIZE = 19;
-export const OFFSET_RATIO = 0.031;
+export const OFFSET_RATIO = 0.03;
+export const LINE_RATIO = 0.0015;
 
 export const saveSgf = (prevBoards: BoardState[]) => {
   const moves = [...prevBoards].reverse(); // 처음 수부터 재생하기 위해 역순
@@ -103,3 +104,17 @@ export const countCapturedStones = (boards: BoardState[]) => {
 
   return { blackCaptured, whiteCaptured };
 };
+
+export function findBoardDiff(
+  oldBoard: BoardState,
+  newBoard: BoardState
+): { x: number; y: number } | null {
+  for (let x = 0; x < BOARD_SIZE; x++) {
+    for (let y = 0; y < BOARD_SIZE; y++) {
+      if (oldBoard[x][y] !== newBoard[x][y]) {
+        return { x, y };
+      }
+    }
+  }
+  return null;
+}

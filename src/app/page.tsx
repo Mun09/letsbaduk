@@ -4,7 +4,9 @@ import Image from "next/image";
 import {
   BOARD_SIZE,
   countCapturedStones,
+  findBoardDiff,
   handleFileUpload,
+  LINE_RATIO,
   OFFSET_RATIO,
   saveSgf,
 } from "./utils";
@@ -19,7 +21,11 @@ export default function PreciseGoban() {
       .fill(null)
       .map(() => Array(BOARD_SIZE).fill(null))
   );
-  const [prevBoards, setPrevBoards] = useState<BoardState[]>([]);
+  const [prevBoards, setPrevBoards] = useState<BoardState[]>([
+    Array(BOARD_SIZE)
+      .fill(null)
+      .map(() => Array(BOARD_SIZE).fill(null)),
+  ]);
   const [isBlackTurn, setIsBlackTurn] = useState(true);
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(
     null
@@ -27,16 +33,37 @@ export default function PreciseGoban() {
   const [errorMessage, setErrorMessage] = useState("");
   const [stoneSize, setStoneSize] = useState(60);
   const [currentMoveIndex, setCurrentMoveIndex] = useState(0);
+  const [lastMove, setLastMove] = useState<{ x: number; y: number } | null>(
+    null
+  );
+  const [rectWidth, setRectWidth] = useState(0);
+  const [cellWidth, setCellWidth] = useState(0);
+  const [lineWidth, setLineWidth] = useState(0);
 
   useEffect(() => {
     const updateStoneSize = () => {
       if (boardRef.current) {
         const rect = boardRef.current.getBoundingClientRect();
-        const offsetX = rect.width * OFFSET_RATIO;
-        const usableWidth = rect.width - 2 * offsetX;
-        const cellWidth = usableWidth / (BOARD_SIZE - 1);
+        const computedStyle = window.getComputedStyle(boardRef.current);
+        const borderLeft = parseFloat(computedStyle.borderLeftWidth || "0");
+        const borderRight = parseFloat(computedStyle.borderRightWidth || "0");
 
-        setStoneSize(Math.round(cellWidth * 1.2));
+        const totalBorder = borderLeft + borderRight;
+        const usableRectWidth = rect.width - totalBorder;
+        setRectWidth(usableRectWidth);
+
+        const offsetX = usableRectWidth * OFFSET_RATIO;
+        const oneLine = usableRectWidth * LINE_RATIO;
+        const usableWidth =
+          usableRectWidth - 2 * offsetX - BOARD_SIZE * oneLine;
+        const cellWidth = usableWidth / (BOARD_SIZE - 1);
+        setCellWidth(cellWidth);
+        setLineWidth(oneLine);
+
+        console.log(usableRectWidth);
+        console.log(cellWidth);
+
+        setStoneSize(cellWidth);
       }
     };
 
@@ -160,12 +187,14 @@ export default function PreciseGoban() {
         newBoard,
         ...prev.slice(-(prev.length - currentMoveIndex)),
       ];
-      setIsBlackTurn(updated.length % 2 == 0); // 다음 턴 색상 전환
+      setIsBlackTurn(!isBlackTurn); // 다음 턴 색상 전환
 
       return updated;
-    }); // 최근 2개 보드 상태 저장
+    });
+
     setCurrentMoveIndex(0);
     setErrorMessage("");
+    setLastMove({ x, y });
   };
 
   // 공통 좌표 계산 함수
@@ -209,8 +238,14 @@ export default function PreciseGoban() {
   const nextSu = useCallback(() => {
     const nextIndex = currentMoveIndex - 1;
     if (nextIndex >= 0) {
-      setBoard(prevBoards[nextIndex]);
+      const nextBoard = prevBoards[nextIndex];
+      setBoard(nextBoard);
       setCurrentMoveIndex(nextIndex);
+
+      // 최신 수 위치 찾기
+      const diff = findBoardDiff(prevBoards[nextIndex + 1], nextBoard);
+      if (diff) setLastMove(diff);
+
       setIsBlackTurn((prevBoards.length - nextIndex) % 2 == 0);
     }
   }, [currentMoveIndex, prevBoards]);
@@ -218,8 +253,15 @@ export default function PreciseGoban() {
   const prevSu = useCallback(() => {
     const nextIndex = currentMoveIndex + 1;
     if (nextIndex < prevBoards.length) {
-      setBoard(prevBoards[nextIndex]);
+      const nextBoard = prevBoards[nextIndex];
+      setBoard(nextBoard);
       setCurrentMoveIndex(nextIndex);
+
+      if (nextIndex + 1 < prevBoards.length) {
+        const diff = findBoardDiff(prevBoards[nextIndex + 1], nextBoard);
+        if (diff) setLastMove(diff);
+      }
+
       setIsBlackTurn((prevBoards.length - nextIndex) % 2 == 0);
     }
   }, [currentMoveIndex, prevBoards]);
@@ -243,151 +285,191 @@ export default function PreciseGoban() {
   }, [prevSu, nextSu]);
 
   const { blackCaptured, whiteCaptured } = useMemo(
-    () => countCapturedStones(prevBoards),
-    [prevBoards]
+    () => countCapturedStones(prevBoards.slice(currentMoveIndex)),
+    [prevBoards, currentMoveIndex]
   );
 
   return (
-    <div className="flex flex-col items-center w-full max-w-[100vmin] md:max-w-[600px]">
-      {errorMessage && (
-        <div className="absolute top-2 left-2 bg-red-600 text-white px-2 py-1 rounded text-sm z-10">
-          {errorMessage}
-        </div>
-      )}
-      <div
-        ref={boardRef}
-        onMouseMove={(e) => updateHoverAndPlace(e.clientX, e.clientY)}
-        onClick={() => {
-          if (hoverPos) handlePlaceStone(hoverPos.x, hoverPos.y);
-        }}
-        onTouchStart={(e) => {
-          const touch = e.touches[0];
-          updateHoverAndPlace(touch.clientX, touch.clientY, true); // 즉시 착수
-        }}
-        className="relative w-full max-w-[90vmin] aspect-square border-2 border-gray-800 select-none"
-      >
-        <Image
-          src="/go_ban.svg"
-          alt="바둑판"
-          layout="fill"
-          objectFit="contain"
-          priority
-          draggable={false}
-        />
-
-        {/* 기존 돌들 렌더링 */}
-        {board.map((row, x) =>
-          row.map(
-            (color, y) =>
-              color && (
-                <Image
-                  key={`${x}-${y}`}
-                  src={
-                    color === "black" ? "/black_stone.png" : "/white_stone.png"
-                  }
-                  alt={`${color} stone`}
-                  width={1000} // 실제 크기는 style에서 %로 제어
-                  height={1000}
-                  draggable={false}
-                  style={{
-                    position: "absolute",
-                    left: `calc(${
-                      (OFFSET_RATIO +
-                        (x / (BOARD_SIZE - 1)) * (1 - 2 * OFFSET_RATIO)) *
-                      100
-                    }% - ${stoneSize / 2}px)`, // 중앙 정렬
-                    top: `calc(${
-                      (OFFSET_RATIO +
-                        (y / (BOARD_SIZE - 1)) * (1 - 2 * OFFSET_RATIO)) *
-                      100
-                    }% - ${stoneSize / 2}px)`, // 중앙 정렬
-                    width: `${stoneSize}px`,
-                    height: `${stoneSize}px`,
-                    pointerEvents: "none",
-                  }}
-                />
-              )
-          )
+    <div className="w-full flex justify-center items-center">
+      <div className="flex flex-col items-center w-full max-w-[100vmin] md:max-w-[600px]">
+        {errorMessage && (
+          <div className="absolute top-2 left-2 bg-red-600 text-white px-2 py-1 rounded text-sm z-10">
+            {errorMessage}
+          </div>
         )}
-
-        {/* 미리보기 돌 */}
-        {hoverPos && !board[hoverPos.x][hoverPos.y] && (
+        <div
+          ref={boardRef}
+          onMouseMove={(e) => updateHoverAndPlace(e.clientX, e.clientY)}
+          onClick={() => {
+            if (hoverPos) handlePlaceStone(hoverPos.x, hoverPos.y);
+          }}
+          onTouchStart={(e) => {
+            const touch = e.touches[0];
+            updateHoverAndPlace(touch.clientX, touch.clientY, true); // 즉시 착수
+          }}
+          className="relative w-full max-w-[90vmin] aspect-square select-none"
+        >
           <Image
-            src={isBlackTurn ? "/black_stone.png" : "/white_stone.png"}
-            alt="preview stone"
-            width={1000} // 실제 크기는 style에서 %로 제어
-            height={1000}
+            src="/go_ban.svg"
+            alt="바둑판"
+            fill
+            priority
             draggable={false}
-            style={{
-              position: "absolute",
-              left: `calc(${
-                (OFFSET_RATIO +
-                  (hoverPos.x / (BOARD_SIZE - 1)) * (1 - 2 * OFFSET_RATIO)) *
-                100
-              }% - ${stoneSize / 2}px)`,
-              top: `calc(${
-                (OFFSET_RATIO +
-                  (hoverPos.y / (BOARD_SIZE - 1)) * (1 - 2 * OFFSET_RATIO)) *
-                100
-              }% - ${stoneSize / 2}px)`,
-              opacity: 0.5,
-              pointerEvents: "none",
-              width: `${stoneSize}px`,
-              height: `${stoneSize}px`,
-            }}
+            style={{ objectFit: "contain" }}
           />
-        )}
-      </div>
-      <br></br>
-      <div className="mt-4 flex items-center justify-center gap-4 text-sm">
-        <button
-          className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
-          onClick={prevSu}
-          disabled={currentMoveIndex >= prevBoards.length - 1}
-        >
-          ◀ 이전 수
-        </button>
 
-        <span>
-          {prevBoards.length - currentMoveIndex} / {prevBoards.length}
-        </span>
+          {/* 기존 돌들 렌더링 */}
+          {board.map((row, x) =>
+            row.map(
+              (color, y) =>
+                color && (
+                  <Image
+                    key={`${x}-${y}`}
+                    src={
+                      color === "black"
+                        ? "/black_stone.png"
+                        : "/white_stone.png"
+                    }
+                    alt={`${color} stone`}
+                    width={1000} // 실제 크기는 style에서 %로 제어
+                    height={1000}
+                    draggable={false}
+                    style={{
+                      position: "absolute",
+                      left: `${
+                        rectWidth * OFFSET_RATIO +
+                        x * (cellWidth + lineWidth) +
+                        lineWidth -
+                        stoneSize / 2
+                      }px`,
+                      top: `${
+                        rectWidth * OFFSET_RATIO +
+                        y * (cellWidth + lineWidth) +
+                        lineWidth -
+                        stoneSize / 2
+                      }px`,
+                      width: `${stoneSize}px`,
+                      height: `${stoneSize}px`,
+                      pointerEvents: "none",
+                    }}
+                  />
+                )
+            )
+          )}
 
-        <button
-          className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
-          onClick={nextSu}
-          disabled={currentMoveIndex <= 0}
-        >
-          다음 수 ▶
-        </button>
-      </div>
+          {/* 미리보기 돌 */}
+          {hoverPos && !board[hoverPos.x][hoverPos.y] && (
+            <Image
+              src={isBlackTurn ? "/black_stone.png" : "/white_stone.png"}
+              alt="preview stone"
+              width={1000} // 실제 크기는 style에서 %로 제어
+              height={1000}
+              draggable={false}
+              style={{
+                position: "absolute",
+                left: `${
+                  rectWidth * OFFSET_RATIO +
+                  hoverPos.x * (cellWidth + lineWidth) +
+                  lineWidth -
+                  stoneSize / 2
+                }px`,
+                top: `${
+                  rectWidth * OFFSET_RATIO +
+                  hoverPos.y * (cellWidth + lineWidth) +
+                  lineWidth -
+                  stoneSize / 2
+                }px`,
+                opacity: 0.5,
+                pointerEvents: "none",
+                width: `${stoneSize}px`,
+                height: `${stoneSize}px`,
+              }}
+            />
+          )}
 
-      <br></br>
+          {lastMove && board[lastMove.x][lastMove.y] && (
+            <div
+              style={{
+                position: "absolute",
+                left: `${
+                  rectWidth * OFFSET_RATIO +
+                  lastMove.x * (cellWidth + lineWidth) +
+                  lineWidth -
+                  stoneSize / 4
+                }px`,
+                top: `${
+                  rectWidth * OFFSET_RATIO +
+                  lastMove.y * (cellWidth + lineWidth) +
+                  lineWidth -
+                  stoneSize / 4
+                }px`,
+                width: 0,
+                height: 0,
+                borderLeft: `${stoneSize / 4}px solid transparent`,
+                borderRight: `${stoneSize / 4}px solid transparent`,
+                borderTop: `${stoneSize / 2}px solid blue`, // 세모의 색상과 방향
+                pointerEvents: "none",
+                zIndex: 10,
+              }}
+            />
+          )}
+        </div>
+        <br></br>
+        <div className="mt-4 flex items-center justify-center gap-4 text-sm">
+          <button
+            className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+            onClick={prevSu}
+            disabled={currentMoveIndex >= prevBoards.length - 1}
+          >
+            ◀ 이전 수
+          </button>
 
-      <div className="mt-4 flex gap-4 text-sm text-gray-800">
-        <div>⚪ 백 사석: {whiteCaptured}</div>
-        <div>⚫ 흑 사석: {blackCaptured}</div>
-      </div>
+          <span>
+            {prevBoards.length - 1 - currentMoveIndex} / {prevBoards.length - 1}
+          </span>
 
-      <br></br>
-      <div className="flex gap-2 mt-4">
-        <button
-          onClick={() => saveSgf(prevBoards)}
-          className="px-3 py-1 bg-green-600 text-white rounded"
-        >
-          SGF 저장
-        </button>
+          <button
+            className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+            onClick={nextSu}
+            disabled={currentMoveIndex <= 0}
+          >
+            다음 수 ▶
+          </button>
+        </div>
 
-        <label className="px-3 py-1 bg-blue-600 text-white rounded cursor-pointer">
-          SGF 불러오기
-          <input
-            type="file"
-            accept=".sgf"
-            onChange={(e) =>
-              handleFileUpload(e, setPrevBoards, setBoard, setCurrentMoveIndex)
-            }
-            className="hidden"
-          />
-        </label>
+        <br></br>
+
+        <div className="mt-4 flex gap-4 text-sm text-gray-800">
+          <div>⚪ 백 사석: {whiteCaptured}</div>
+          <div>⚫ 흑 사석: {blackCaptured}</div>
+        </div>
+
+        <br></br>
+        <div className="flex gap-2 mt-4">
+          <button
+            onClick={() => saveSgf(prevBoards)}
+            className="px-3 py-1 bg-green-600 text-white rounded"
+          >
+            SGF 저장
+          </button>
+
+          <label className="px-3 py-1 bg-blue-600 text-white rounded cursor-pointer">
+            SGF 불러오기
+            <input
+              type="file"
+              accept=".sgf"
+              onChange={(e) =>
+                handleFileUpload(
+                  e,
+                  setPrevBoards,
+                  setBoard,
+                  setCurrentMoveIndex
+                )
+              }
+              className="hidden"
+            />
+          </label>
+        </div>
       </div>
     </div>
   );
