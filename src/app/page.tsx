@@ -60,9 +60,6 @@ export default function PreciseGoban() {
         setCellWidth(cellWidth);
         setLineWidth(oneLine);
 
-        console.log(usableRectWidth);
-        console.log(cellWidth);
-
         setStoneSize(cellWidth);
       }
     };
@@ -246,7 +243,7 @@ export default function PreciseGoban() {
       const diff = findBoardDiff(prevBoards[nextIndex + 1], nextBoard);
       if (diff) setLastMove(diff);
 
-      setIsBlackTurn((prevBoards.length - nextIndex) % 2 == 0);
+      setIsBlackTurn((prevBoards.length - nextIndex) % 2 != 0);
     }
   }, [currentMoveIndex, prevBoards]);
 
@@ -262,9 +259,34 @@ export default function PreciseGoban() {
         if (diff) setLastMove(diff);
       }
 
-      setIsBlackTurn((prevBoards.length - nextIndex) % 2 == 0);
+      setIsBlackTurn((prevBoards.length - nextIndex) % 2 != 0);
     }
   }, [currentMoveIndex, prevBoards]);
+
+  const startNewGame = () => {
+    const confirmed = window.confirm(
+      "정말로 새 게임을 시작하시겠습니까?\n현재 진행 중인 내용은 모두 사라집니다."
+    );
+
+    if (!confirmed) return;
+
+    setBoard(
+      Array(BOARD_SIZE)
+        .fill(null)
+        .map(() => Array(BOARD_SIZE).fill(null))
+    );
+    setPrevBoards([
+      Array(BOARD_SIZE)
+        .fill(null)
+        .map(() => Array(BOARD_SIZE).fill(null)),
+    ]);
+    setIsBlackTurn(true);
+    setHoverPos(null);
+    setErrorMessage("");
+    setLastMove(null);
+    prevBoardsRef.current = [];
+    setCurrentMoveIndex(0);
+  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -292,11 +314,23 @@ export default function PreciseGoban() {
   return (
     <div className="w-full flex justify-center items-center">
       <div className="flex flex-col items-center w-full max-w-[100vmin] md:max-w-[600px]">
+        <br></br>
         {errorMessage && (
           <div className="absolute top-2 left-2 bg-red-600 text-white px-2 py-1 rounded text-sm z-10">
             {errorMessage}
           </div>
         )}
+
+        <div>
+          <button
+            className="px-3 py-1 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
+            onClick={startNewGame}
+          >
+            새 게임
+          </button>
+        </div>
+
+        <br></br>
         <div
           ref={boardRef}
           onMouseMove={(e) => updateHoverAndPlace(e.clientX, e.clientY)}
